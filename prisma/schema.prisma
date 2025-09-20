@@ -1,0 +1,589 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id             String          @id @default(uuid())
+  name           String          @db.VarChar(255)
+  identifier     String?         @unique @db.VarChar(50)
+  fullName       String?         @db.VarChar(255)
+  shortName      String?         @db.VarChar(100)
+  workPhone      String?         @db.VarChar(20)
+  city           String?         @db.VarChar(100)
+  countryCode    String?         @db.VarChar(2)
+  phoneNumber    String?         @db.VarChar(20)
+  address        Json?
+  settings       Json?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  emailLogs      EmailLog[]
+  employees      Employee[]
+  forms          Form[]
+  formFields     FormField[]
+  formSubmissions FormSubmission[]
+  formResponses  FormResponse[]
+  notifications  Notification[]
+  payrollRecords PayrollRecord[]
+  refreshTokens  RefreshToken[]
+  roles          Role[]
+  users          User[]
+  files          File[]
+  otps           Otp[]
+  integrations   Integration[]
+  leaveTypes     LeaveType[]
+  leaveRequests  LeaveRequest[]
+  leaveBalances  LeaveBalance[]
+  payrollConfig      PayrollConfig?
+  payrollPeriods     PayrollPeriod[]
+  failedLoginAttempts FailedLoginAttempt[]
+  userSessions       UserSession[]
+  userActivities     UserActivity[]
+
+  @@map("companies")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  permissions String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users       User[]
+
+  @@unique([name, companyId])
+  @@index([companyId])
+  @@map("roles")
+}
+
+model User {
+  id                    String           @id @default(uuid())
+  username              String           @db.VarChar(50)
+  email                 String           @db.VarChar(255)
+  password              String           @db.VarChar(255)
+  firstName             String           @db.VarChar(100)
+  lastName              String           @db.VarChar(100)
+  phoneNumber           String?          @db.VarChar(20)
+  avatar                String?          @db.VarChar(255)
+  isActive              Boolean          @default(true)
+  emailVerified         Boolean          @default(false)
+  twoFactorEnabled      Boolean          @default(false)
+  twoFactorSecret       String?          @db.VarChar(255)
+  twoFactorSetupRequired Boolean         @default(false)
+  backupCodes           String[]
+  resetToken            String?          @db.VarChar(255)
+  resetTokenExpiry      DateTime?
+  lastLogin             DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  companyId             String
+  roleId                String?
+  employee              Employee?
+  formSubmissions       FormSubmission[]
+  createdForms          Form[]           @relation("FormCreator")
+  notifications         Notification[]
+  refreshTokens         RefreshToken[]
+  userSessions          UserSession[]
+  userActivities        UserActivity[]
+  uploadedFiles         File[]           @relation("FileUploader")
+  otps                  Otp[]
+  approvedLeaves        LeaveRequest[]   @relation("LeaveApprover")
+  rejectedLeaves        LeaveRequest[]   @relation("LeaveRejecter")
+  company               Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role                  Role?            @relation(fields: [roleId], references: [id])
+
+  @@unique([email, companyId])
+  @@unique([username, companyId])
+  @@index([companyId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String
+  companyId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([userId, companyId])
+  @@map("refresh_tokens")
+}
+
+model Employee {
+  id               String          @id @default(uuid())
+  employeeId       String          @db.VarChar(50)
+  firstName        String          @db.VarChar(100)
+  lastName         String          @db.VarChar(100)
+  email            String          @db.VarChar(255)
+  phoneNumber      String?         @db.VarChar(20)
+  department       String          @db.VarChar(100)
+  position         String          @db.VarChar(100)
+  status           String          @db.VarChar(50)
+  hireDate         DateTime
+  terminationDate  DateTime?
+  salary           Decimal         @db.Decimal(10,2)
+  emergencyContact Json?
+  address          Json?
+  bankDetails      Json?
+  taxInfo          Json?
+  benefits         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  companyId        String
+  userId           String?         @unique
+  managerId        String?
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager          Employee?       @relation("EmployeeManager", fields: [managerId], references: [id])
+  directReports    Employee[]      @relation("EmployeeManager")
+  user             User?           @relation(fields: [userId], references: [id])
+  payrollRecords   PayrollRecord[]
+  leaveRequests    LeaveRequest[]
+  leaveBalances    LeaveBalance[]
+
+  @@unique([employeeId, companyId])
+  @@unique([email, companyId])
+  @@index([companyId])
+  @@map("employees")
+}
+
+model Form {
+  id            String           @id @default(uuid())
+  title         String           @db.VarChar(255)
+  description   String?          @db.Text
+  category      String           @db.VarChar(50)
+  status        String           @db.VarChar(50)
+  isTemplate    Boolean          @default(false)
+  settings      Json?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  companyId     String
+  createdBy     String
+  fields        FormField[]
+  submissions   FormSubmission[]
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator       User             @relation("FormCreator", fields: [createdBy], references: [id])
+
+  @@map("forms")
+}
+
+model FormField {
+  id         String    @id @default(uuid())
+  type       String    @db.VarChar(50)
+  label      String    @db.VarChar(255)
+  name       String    @db.VarChar(255)
+  required   Boolean   @default(false)
+  options    Json?
+  validation Json?
+  order      Int
+  formId     String
+  companyId  String
+  form       Form      @relation(fields: [formId], references: [id], onDelete: Cascade)
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([formId, companyId])
+  @@map("form_fields")
+}
+
+model FormSubmission {
+  id          String         @id @default(uuid())
+  submittedAt DateTime       @default(now())
+  formId      String
+  submittedBy String
+  companyId   String
+  responses   FormResponse[]
+  form        Form           @relation(fields: [formId], references: [id], onDelete: Cascade)
+  submitter   User           @relation(fields: [submittedBy], references: [id])
+  company     Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([formId, companyId])
+  @@index([submittedBy, companyId])
+  @@map("form_submissions")
+}
+
+model FormResponse {
+  id           String         @id @default(uuid())
+  fieldName    String         @db.VarChar(255)
+  value        String         @db.Text
+  submissionId String
+  companyId    String
+  submission   FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([submissionId, companyId])
+  @@map("form_responses")
+}
+
+model PayrollRecord {
+  id              String         @id @default(uuid())
+  payPeriodStart  DateTime
+  payPeriodEnd    DateTime
+  grossSalary     Decimal        @db.Decimal(10,2)
+  totalDeductions Decimal        @db.Decimal(10,2)
+  netSalary       Decimal        @db.Decimal(10,2)
+  workingDays     Int
+  deductions      Json?
+  allowances      Json?
+  status          String         @db.VarChar(50)
+  processedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  employeeId      String
+  companyId       String
+  periodId        String?
+  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period          PayrollPeriod? @relation("PeriodRecords", fields: [periodId], references: [id])
+
+  @@index([periodId])
+  @@map("payroll_records")
+}
+
+model Notification {
+  id            String               @id @default(uuid())
+  title         String               @db.VarChar(255)
+  message       String               @db.Text
+  type          String               @db.VarChar(50)
+  category      String               @db.VarChar(50)
+  data          Json?
+  isRead        Boolean              @default(false)
+  readAt        DateTime?
+  createdAt     DateTime             @default(now())
+  userId        String
+  companyId     String
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model EmailLog {
+  id        String      @id @default(uuid())
+  recipient String      @db.VarChar(255)
+  subject   String      @db.VarChar(255)
+  status    String      @db.VarChar(50)
+  messageId String?     @db.VarChar(255)
+  error     String?     @db.Text
+  sentAt    DateTime    @default(now())
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@map("email_logs")
+}
+
+// System Configuration and Logging Models
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique @db.VarChar(255)
+  value       Json
+  description String?  @db.VarChar(500)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String   @db.VarChar(20)
+  message   String   @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+// Security and Session Models
+model FailedLoginAttempt {
+  id        String   @id @default(uuid())
+  email     String   @db.VarChar(255)
+  ipAddress String?  @db.VarChar(45)
+  userAgent String?  @db.VarChar(500)
+  companyId String?  // Optional as login attempts might be before company identification
+  createdAt DateTime @default(now())
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([ipAddress])
+  @@index([createdAt])
+  @@index([companyId])
+  @@map("failed_login_attempts")
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique @db.VarChar(255)
+  ipAddress String?  @db.VarChar(45)
+  userAgent String?  @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  companyId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([companyId])
+  @@index([userId, companyId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model UserActivity {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String   @db.VarChar(100)
+  details   Json?
+  ipAddress String?  @db.VarChar(45)
+  userAgent String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+  companyId String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([companyId])
+  @@index([userId, companyId])
+  @@index([companyId, action])
+  @@map("user_activities")
+}
+
+// Audit Logging Model
+model AuditLog {
+  id          String   @id @default(uuid())
+  tableName   String   @db.VarChar(100)
+  recordId    String   @db.VarChar(255)
+  action      String   @db.VarChar(50)
+  oldValues   Json?
+  newValues   Json?
+  userId      String?  @db.VarChar(255)
+  ipAddress   String?  @db.VarChar(45)
+  userAgent   String?  @db.VarChar(500)
+  createdAt   DateTime @default(now())
+
+  @@index([tableName])
+  @@index([recordId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// File Management Models
+model File {
+  id          String   @id @default(uuid())
+  filename    String   @db.VarChar(255)
+  storageName String   @db.VarChar(255)
+  mimetype    String   @db.VarChar(100)
+  size        Int
+  description String?  @db.VarChar(500)
+  tags        String[]
+  entityType  String?  @db.VarChar(100)
+  entityId    String?  @db.VarChar(255)
+  companyId   String
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  uploader    User     @relation("FileUploader", fields: [uploadedBy], references: [id])
+
+  @@index([companyId])
+  @@index([entityType, entityId])
+  @@map("files")
+}
+
+// OTP Models
+enum OtpType {
+  COMPANY_REGISTRATION
+  USER_LOGIN
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+  EMAIL_VERIFICATION
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  FAILED
+  CANCELLED
+}
+
+model Otp {
+  id          String    @id @default(uuid())
+  phoneNumber String    @db.VarChar(20)
+  type        OtpType
+  purpose     String?   @db.VarChar(255)
+  status      OtpStatus @default(PENDING)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  userId      String?
+  companyId   String    // Made required for strict tenant isolation
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User?     @relation(fields: [userId], references: [id])
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([companyId])
+  @@index([companyId, phoneNumber])
+  @@index([companyId, status])
+  @@map("otps")
+}
+
+// Integration Models
+model Integration {
+  id          String           @id @default(uuid())
+  name        String           @db.VarChar(255)
+  type        String           @db.VarChar(100)
+  status      String           @db.VarChar(50)
+  config      Json?
+  companyId   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  logs        IntegrationLog[]
+
+  @@index([companyId])
+  @@map("integrations")
+}
+
+model IntegrationLog {
+  id            String      @id @default(uuid())
+  integrationId String
+  status        String      @db.VarChar(50)
+  message       String      @db.Text
+  data          Json?
+  createdAt     DateTime    @default(now())
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("integration_logs")
+}
+
+// Leave Management Models
+model LeaveType {
+  id           String         @id @default(uuid())
+  name         String         @db.VarChar(100)
+  description  String?        @db.VarChar(500)
+  maxDays      Int
+  carryOver    Boolean        @default(false)
+  isActive     Boolean        @default(true)
+  companyId    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requests     LeaveRequest[]
+  balances     LeaveBalance[]
+
+  @@unique([name, companyId])
+  @@index([companyId])
+  @@map("leave_types")
+}
+
+model LeaveRequest {
+  id          String    @id @default(uuid())
+  employeeId  String
+  typeId      String
+  startDate   DateTime
+  endDate     DateTime
+  days        Int
+  status      String    @db.VarChar(50)
+  reason      String?   @db.Text
+  approvedBy  String?
+  approvedAt  DateTime?
+  rejectedBy  String?
+  rejectedAt  DateTime?
+  comments    String?   @db.Text
+  companyId   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  approver    User?     @relation("LeaveApprover", fields: [approvedBy], references: [id])
+  rejecter    User?     @relation("LeaveRejecter", fields: [rejectedBy], references: [id])
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model LeaveBalance {
+  id            String    @id @default(uuid())
+  employeeId    String
+  typeId        String
+  year          Int
+  totalDays     Int
+  usedDays      Int       @default(0)
+  remainingDays Int
+  companyId     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType     LeaveType @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, typeId, year])
+  @@index([companyId])
+  @@map("leave_balances")
+}
+
+// Payroll Management Models
+model PayrollConfig {
+  id           String   @id @default(uuid())
+  payFrequency String   @db.VarChar(50)
+  taxSettings  Json?
+  companyId    String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_configs")
+}
+
+model PayrollPeriod {
+  id          String          @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime
+  status      String          @db.VarChar(50)
+  totalAmount Decimal         @db.Decimal(12,2)
+  companyId   String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  records     PayrollRecord[] @relation("PeriodRecords")
+
+  @@index([companyId])
+  @@index([status])
+  @@map("payroll_periods")
+}

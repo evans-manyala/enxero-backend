@@ -1,0 +1,183 @@
+// Prisma Schema Extensions for Company Registration & SMS OTP
+// Add these modifications to your existing schema.prisma
+
+// 1. EXTEND Company Model
+model Company {
+  id             String          @id @default(uuid())
+  name           String          @db.VarChar(255)
+  identifier     String?         @unique @db.VarChar(50) // Keep existing for backward compatibility
+  companyId      String?         @unique @db.VarChar(30) // NEW: Auto-generated format {COUNTRY}-{SHORT}-{RANDOM6}
+  fullName       String?         @db.VarChar(255)
+  shortName      String?         @db.VarChar(100)
+  workPhone      String?         @db.VarChar(20)
+  countryCode    String?         @db.VarChar(2)          // NEW: ISO alpha-2 country code
+  phoneNumber    String?         @db.VarChar(20)         // NEW: Owner's phone in E.164 format
+  city           String?         @db.VarChar(100)
+  address        Json?
+  settings       Json?
+  isActive       Boolean         @default(true)
+  status         CompanyStatus   @default(PENDING_VERIFICATION) // NEW: Company verification status
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  // Existing relations...
+  emailLogs      EmailLog[]
+  employees      Employee[]
+  forms          forms[]
+  notifications  notifications[]
+  payrollRecords PayrollRecord[]
+  payrollConfigs PayrollConfig[]
+  payrollPeriods PayrollPeriod[]
+  users          User[]
+  leaveTypes     LeaveType[]
+  leaveRequests  LeaveRequest[]
+  integrations   Integration[]
+  otps           Otp[]           // NEW: Company registration OTPs
+
+  @@index([name])
+  @@index([identifier])
+  @@index([companyId])        // NEW: Index for fast lookups
+  @@index([countryCode])      // NEW: Index for country filtering
+  @@index([phoneNumber])      // NEW: Index for phone lookups
+  @@index([status])           // NEW: Index for status filtering
+  @@index([isActive])
+  @@map("companies")
+}
+
+// 2. EXTEND User Model
+model User {
+  id                  String               @id @default(uuid())
+  username            String               @unique @db.VarChar(50)
+  email               String               @unique @db.VarChar(255)
+  password            String               @db.VarChar(255)
+  firstName           String               @db.VarChar(100)
+  lastName            String               @db.VarChar(100)
+  phoneNumber         String?              @unique @db.VarChar(20) // MODIFIED: Add unique constraint
+  avatar              String?              @db.VarChar(255)
+  isActive            Boolean              @default(true)
+  emailVerified       Boolean              @default(false)
+  phoneVerified       Boolean              @default(false)      // NEW: Phone verification status
+  twoFactorSecret     String?              @db.VarChar(255)
+  backupCodes         String[]
+  resetToken          String?              @db.VarChar(255)
+  resetTokenExpiry    DateTime?
+  lastLogin           DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  companyId           String
+  roleId              String?
+  bio                 String?
+  language            String?              @db.VarChar(10)
+  preferences         Json?
+  timezone            String?              @db.VarChar(50)
+  accountStatus       String?              @db.VarChar(20)
+  deactivatedAt       DateTime?
+  deactivationReason  String?
+  lastPasswordChange  DateTime?            @default(now())
+  passwordHistory     Json?
+  
+  // Existing relations...
+  employee            Employee?
+  failedLoginAttempts FailedLoginAttempt[]
+  form_submissions    form_submissions[]
+  forms               forms[]
+  notifications       notifications[]
+  refreshTokens       RefreshToken[]
+  activities          UserActivity[]
+  sessions            UserSession[]
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role                Role?                @relation(fields: [roleId], references: [id])
+  approvedLeaveRequests LeaveRequest[]     @relation("ApprovedLeaveRequests")
+  auditLogs           audit_logs[]
+  otps                Otp[]                // NEW: User login OTPs
+
+  @@index([email])
+  @@index([username])
+  @@index([phoneNumber])      // NEW: Index for phone lookups
+  @@index([phoneVerified])    // NEW: Index for verification status
+  @@index([isActive])
+  @@index([emailVerified])
+  @@index([companyId])
+  @@index([roleId])
+  @@index([lastLogin])
+  @@index([accountStatus])
+  @@index([lastPasswordChange])
+  @@map("users")
+}
+
+// 3. NEW OTP Model
+model Otp {
+  id          String    @id @default(uuid())
+  phoneNumber String    @db.VarChar(20)
+  otpHash     String    @db.VarChar(255)    // Hashed OTP (never store plain text)
+  salt        String    @db.VarChar(255)    // Salt for hashing
+  type        OtpType                       // COMPANY_REGISTRATION, USER_LOGIN
+  purpose     String?   @db.VarChar(100)    // Additional context
+  expiresAt   DateTime                      // 5-minute expiration
+  attempts    Int       @default(0)         // Failed attempt counter
+  maxAttempts Int       @default(3)         // Maximum allowed attempts
+  status      OtpStatus @default(PENDING)   // PENDING, VERIFIED, EXPIRED, FAILED
+  verifiedAt  DateTime?                     // When OTP was successfully verified
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Optional relations
+  companyId   String?                       // For company registration OTPs
+  userId      String?                       // For user login OTPs
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber])
+  @@index([type])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([createdAt])
+  @@index([companyId])
+  @@index([userId])
+  @@map("otps")
+}
+
+// 4. NEW Enums
+enum CompanyStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum OtpType {
+  COMPANY_REGISTRATION
+  USER_LOGIN
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  FAILED
+  CANCELLED
+}
+
+// 5. EXTEND RefreshToken Model (optional improvements)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String
+  deviceId  String?  @db.VarChar(255)     // NEW: Track device for security
+  ipAddress String?  @db.VarChar(45)      // NEW: Track IP for security
+  userAgent String?  @db.VarChar(500)     // NEW: Track user agent
+  revoked   Boolean  @default(false)      // NEW: Manual revocation flag
+  revokedAt DateTime?                     // NEW: When token was revoked
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([token])
+  @@index([revoked])
+  @@index([deviceId])
+  @@map("refresh_tokens")
+}

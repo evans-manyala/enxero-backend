@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://enxero:${POSTGRES_PASSWORD}@postgres:5432/enxero_production
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - PORT=3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    restart: unless-stopped
+    networks:
+      - enxero-network
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_DB=enxero_production
+      - POSTGRES_USER=enxero
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enxero -d enxero_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - enxero-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - enxero-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+      - uploads:/var/www/uploads
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - enxero-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:
+
+networks:
+  enxero-network:
+    driver: bridge
